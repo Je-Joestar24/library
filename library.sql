@@ -31,14 +31,13 @@
  * - Status Tracking: Enumerated status for borrowings (borrowed, returned, overdue)
  * - Unique Constraints: Prevent duplicate active borrowings
  */
-
 -- Librarians table - Manages library staff information
 CREATE TABLE librarians (
     librarian_id INT AUTO_INCREMENT PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password VARCHAR(256) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -50,6 +49,7 @@ CREATE TABLE members (
     email VARCHAR(255) UNIQUE NOT NULL,
     phone_number VARCHAR(20),
     address TEXT,
+    password VARCHAR(256) NOT NULL,
     membership_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -197,7 +197,7 @@ CREATE TABLE audit_log (
 
 
 -- Initial Librarian
-INSERT INTO librarians (first_name, last_name, email, password_hash) VALUES
+INSERT INTO librarians (first_name, last_name, email, password) VALUES
 ('Admin', 'Librarian', 'admin@library.com', SHA2('admin123', 256));
 
 -- Trigger for Books Audit
@@ -237,12 +237,13 @@ CREATE PROCEDURE signup_member(
     IN p_first_name VARCHAR(100),
     IN p_last_name VARCHAR(100),
     IN p_email VARCHAR(255),
+    IN p_pass VARCHAR(200),
     IN p_phone_number VARCHAR(20),
     IN p_address TEXT
 )
 BEGIN
-    INSERT INTO members (first_name, last_name, email, phone_number, address, membership_date)
-    VALUES (p_first_name, p_last_name, p_email, p_phone_number, p_address, CURDATE());
+    INSERT INTO members (first_name, last_name, email, password, phone_number, address, membership_date)
+    VALUES (p_first_name, p_last_name, p_email, SHA2(p_pass, 256), p_phone_number, p_address, CURDATE());
 END //
 DELIMITER ;
 
@@ -377,7 +378,7 @@ END //
 DELIMITER ;
 
 -- Example usage:
-CALL signup_member('John', 'Doe', 'john.doe@email.com', '+1234567890', '123 Main St');
+CALL signup_member('John', 'Doe', 'john.doe@email.com', 'John00', '+1234567890', '123 Main St');
 
 CALL add_categories('["Fiction", "Non-Fiction", "Science", "Technology", "Literature"]');
 
