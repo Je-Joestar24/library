@@ -50,7 +50,6 @@ CREATE TABLE members (
     phone_number VARCHAR(20),
     address TEXT,
     password VARCHAR(256) NOT NULL,
-    membership_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_members_email ON members(email);
@@ -193,12 +192,7 @@ CREATE TABLE audit_log (
 );
 
 
--- OPERATIONS and Triggers
-
-
--- Initial Librarian
-INSERT INTO librarians (first_name, last_name, email, password) VALUES
-('Admin', 'Librarian', 'admin@library.com', SHA2('admin123', 256));
+-- PROCEDURES and Triggers
 
 -- Trigger for Books Audit
 DELIMITER //
@@ -218,6 +212,8 @@ END //
 
 DELIMITER ;
 
+-- ------------------------------------------------------------------------- SIGNUP MEMBER
+
 /*
  * Stored Procedure: signup_member
  * Description: Creates a new library member record with basic information
@@ -229,7 +225,6 @@ DELIMITER ;
  *   - p_address: Member's physical address (TEXT)
  * Returns: None
  * Notes: 
- *   - Automatically sets membership_date to current date
  *   - Does not perform email validation or duplicate checking
  */
 DELIMITER //
@@ -242,10 +237,12 @@ CREATE PROCEDURE signup_member(
     IN p_address TEXT
 )
 BEGIN
-    INSERT INTO members (first_name, last_name, email, password, phone_number, address, membership_date)
-    VALUES (p_first_name, p_last_name, p_email, SHA2(p_pass, 256), p_phone_number, p_address, CURDATE());
+    INSERT INTO members (first_name, last_name, email, password, phone_number, address)
+    VALUES (p_first_name, p_last_name, p_email, SHA2(p_pass, 256), p_phone_number, p_address);
 END //
 DELIMITER ;
+
+-- -------------------------------------------------------------------------- ADD CATEGORIES
 
 /*
  * Stored Procedure: add_categories
@@ -275,6 +272,8 @@ BEGIN
     END WHILE;
 END //
 DELIMITER ;
+
+-- ---------------------------------------------------------------------- ADD AUTHORS
 
 /*
  * Stored Procedure: add_authors
@@ -307,6 +306,8 @@ BEGIN
     END WHILE;
 END //
 DELIMITER ;
+
+-- ------------------------------------------------------------------------- ADD BOOK
 
 /*
  * Stored Procedure: add_book
@@ -376,6 +377,234 @@ BEGIN
     COMMIT;
 END //
 DELIMITER ;
+
+
+-- ---------------------------------------------------------- LOGIN PROCEDURES
+
+-- Login procedure for members
+DELIMITER //
+CREATE PROCEDURE member_login(
+    IN p_email VARCHAR(255),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+    DECLARE member_exists INT;
+    
+    -- Check if credentials match
+    SELECT 
+        member_id,
+        first_name,
+        last_name,
+        email
+    FROM members 
+    WHERE email = p_email 
+    AND password = SHA2(p_password, 256);
+    
+END //
+DELIMITER ;
+
+-- Login procedure for librarians 
+DELIMITER //
+CREATE PROCEDURE librarian_login(
+    IN p_email VARCHAR(255),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+    DECLARE librarian_exists INT;
+    
+    -- Check if credentials match
+    SELECT 
+        librarian_id,
+        first_name, 
+        last_name,
+        email
+    FROM librarians
+    WHERE email = p_email
+    AND password = SHA2(p_password, 256);
+    
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- VIEW PROFILE(MEMBER)
+
+-- View Profile procedure for members
+DELIMITER //
+CREATE PROCEDURE view_member_profile(
+    IN p_member_id INT
+)
+BEGIN
+    SELECT 
+        member_id,
+        first_name,
+        last_name,
+        email,
+        phone_number,
+        address
+    FROM members
+    WHERE member_id = p_member_id;
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- VIEW PROFILE(LIB)
+
+-- View Profile procedure for librarians
+DELIMITER //
+CREATE PROCEDURE view_librarian_profile(
+    IN p_librarian_id INT
+)
+BEGIN
+    SELECT 
+        librarian_id,
+        first_name,
+        last_name,
+        email
+    FROM librarians
+    WHERE librarian_id = p_librarian_id;
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- EDIT PROFILE(MEMBER)
+
+-- Edit Profile procedure for members
+DELIMITER //
+CREATE PROCEDURE edit_member_profile(
+    IN p_member_id INT,
+    IN p_first_name VARCHAR(100),
+    IN p_last_name VARCHAR(100),
+    IN p_phone_number VARCHAR(20),
+    IN p_address TEXT
+)
+BEGIN
+    UPDATE members
+    SET 
+        first_name = COALESCE(p_first_name, first_name),
+        last_name = COALESCE(p_last_name, last_name),
+        phone_number = COALESCE(p_phone_number, phone_number),
+        address = COALESCE(p_address, address),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE member_id = p_member_id;
+    
+    -- Return updated profile
+    SELECT * FROM members WHERE member_id = p_member_id;
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- EDIT PROFILE(LIB)
+
+-- Edit Profile procedure for librarians
+DELIMITER //
+CREATE PROCEDURE edit_librarian_profile(
+    IN p_librarian_id INT,
+    IN p_first_name VARCHAR(100),
+    IN p_last_name VARCHAR(100)
+)
+BEGIN
+    UPDATE librarians
+    SET 
+        first_name = COALESCE(p_first_name, first_name),
+        last_name = COALESCE(p_last_name, last_name)
+    WHERE librarian_id = p_librarian_id;
+    
+    -- Return updated profile
+    SELECT * FROM librarians WHERE librarian_id = p_librarian_id;
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- CHANGE PASS(MEMBER)
+
+-- Change Password procedure for members
+DELIMITER //
+CREATE PROCEDURE change_member_password(
+    IN p_member_id INT,
+    IN p_old_password VARCHAR(256),
+    IN p_new_password VARCHAR(256)
+)
+BEGIN
+    DECLARE password_matches INT;
+    
+    -- Check if old password matches
+    SELECT COUNT(*) INTO password_matches
+    FROM members
+    WHERE member_id = p_member_id 
+    AND password = SHA2(p_old_password, 256);
+    
+    IF password_matches = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Current password is incorrect';
+    ELSE
+        UPDATE members
+        SET 
+            password = SHA2(p_new_password, 256),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE member_id = p_member_id;
+        
+        SELECT 'Password updated successfully' as message;
+    END IF;
+END //
+DELIMITER ;
+
+-- ------------------------------------------------------------------------- CHANGE PASS
+
+-- Change Password procedure for librarians
+DELIMITER //
+CREATE PROCEDURE change_librarian_password(
+    IN p_librarian_id INT,
+    IN p_old_password VARCHAR(256),
+    IN p_new_password VARCHAR(256)
+)
+BEGIN
+    DECLARE password_matches INT;
+    
+    -- Check if old password matches
+    SELECT COUNT(*) INTO password_matches
+    FROM librarians
+    WHERE librarian_id = p_librarian_id 
+    AND password = SHA2(p_old_password, 256);
+    
+    IF password_matches = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Current password is incorrect';
+    ELSE
+        UPDATE librarians
+        SET password = SHA2(p_new_password, 256)
+        WHERE librarian_id = p_librarian_id;
+        
+        SELECT 'Password updated successfully' as message;
+    END IF;
+END //
+DELIMITER ;
+
+
+-- -------------------------------------------------------------------------------- PROCEDURES CALLS 
+
+
+-- Test member login
+CALL member_login('john.doe@email.com', 'John00');
+
+-- Test librarian login 
+CALL librarian_login('admin@library.com', 'admin123');
+
+-- Test view member profile
+CALL view_member_profile(1);
+
+-- Test view librarian profile
+CALL view_librarian_profile(1);
+
+-- Test edit member profile
+CALL edit_member_profile(1, 'John', 'Smith', '+1987654321', '456 Oak Avenue');
+
+-- Test change member password
+CALL change_member_password(1, 'John00', 'NewPass123');
+
+-- Test change librarian password
+CALL change_librarian_password(1, 'admin123', 'NewAdminPass123');
+
+-- OPERATIONS
+-- INITIAL OPERATIONS NEEDED
+
+-- Initial Librarian
+INSERT INTO librarians (first_name, last_name, email, password) VALUES
+('Admin', 'Librarian', 'admin@library.com', SHA2('admin123', 256));
 
 -- Example usage:
 CALL signup_member('John', 'Doe', 'john.doe@email.com', 'John00', '+1234567890', '123 Main St');
