@@ -193,7 +193,6 @@ CREATE TABLE audit_log (
 
 
 -- PROCEDURES and Triggers
-
 -- Trigger for Books Audit
 DELIMITER //
 CREATE TRIGGER books_after_insert
@@ -210,7 +209,15 @@ BEGIN
     );
 END //
 
-DELIMITER ;
+
+-- Trigger for Authors to automatically set full_name
+CREATE TRIGGER authors_before_insert
+BEFORE INSERT ON authors
+FOR EACH ROW
+BEGIN
+    SET NEW.full_name = CONCAT(NEW.first_name, ' ', NEW.last_name);
+END //
+
 
 -- ------------------------------------------------------------------------- SIGNUP MEMBER
 
@@ -227,7 +234,7 @@ DELIMITER ;
  * Notes: 
  *   - Does not perform email validation or duplicate checking
  */
-DELIMITER //
+
 CREATE PROCEDURE signup_member(
     IN p_first_name VARCHAR(100),
     IN p_last_name VARCHAR(100),
@@ -240,9 +247,41 @@ BEGIN
     INSERT INTO members (first_name, last_name, email, password, phone_number, address)
     VALUES (p_first_name, p_last_name, p_email, SHA2(p_pass, 256), p_phone_number, p_address);
 END //
-DELIMITER ;
 
--- -------------------------------------------------------------------------- ADD CATEGORIES
+
+-- -------------------------------------------------------------------------- CATEGORIES
+-- ----------------------------------- ADD SINGLE CATEGORY
+
+/*
+ * Stored Procedure: add_category
+ * Description: Inserts a single category into the categories table
+ * Parameters:
+ *   - p_category_name: Name of the category to add (VARCHAR(100))
+ * Returns: 
+ *   - Newly created category ID and name
+ * Example Usage: CALL add_category('Mystery')
+ * Notes:
+ *   - Simple single category insertion
+ *   - Returns the newly created category information
+ */
+
+
+CREATE PROCEDURE add_category(
+    IN p_category_name VARCHAR(100)
+)
+BEGIN
+    INSERT INTO categories (category_name)
+    VALUES (p_category_name);
+    
+    -- Return the newly created category
+    SELECT category_id, category_name 
+    FROM categories 
+    WHERE category_id = LAST_INSERT_ID();
+END //
+
+
+
+-- ----------------------------------- ADD CATEGORIES
 
 /*
  * Stored Procedure: add_categories
@@ -256,7 +295,7 @@ DELIMITER ;
  *   - Does not check for duplicate categories
  *   - Processes categories sequentially using a loop
  */
-DELIMITER //
+
 
 CREATE PROCEDURE add_categories(
     IN category_list JSON
@@ -264,16 +303,246 @@ CREATE PROCEDURE add_categories(
 BEGIN
     DECLARE i INT DEFAULT 0;
     DECLARE n INT DEFAULT JSON_LENGTH(category_list);
+    DECLARE new_category_id INT;
+    DECLARE new_category_name VARCHAR(100);
     
     WHILE i < n DO
-        INSERT INTO categories (category_name)
-        VALUES (JSON_UNQUOTE(JSON_EXTRACT(category_list, CONCAT('$[', i, ']'))));
+        -- Extract the category name from JSON array
+        SET new_category_name = JSON_UNQUOTE(JSON_EXTRACT(category_list, CONCAT('$[', i, ']')));
+        
+        -- Call the add_category procedure for each category
+        INSERT INTO categories (category_name) VALUES (new_category_name);
+        
         SET i = i + 1;
     END WHILE;
+    SET i = 0;
+    -- Return all categories after insertion
+    SELECT * FROM categories ORDER BY category_id;
 END //
-DELIMITER ;
 
--- ---------------------------------------------------------------------- ADD AUTHORS
+
+-- ----------------------------------- EDIT CATEGORIES
+/*
+ * Stored Procedure: edit_category
+ * Description: Updates an existing category name in the categories table
+ * Parameters:
+ *   - p_category_id: ID of the category to update (INT)
+ *   - p_category_name: New name for the category (VARCHAR(100))
+ * Returns: 
+ *   - Updated category record if successful
+ *   - Error if category does not exist
+ * Example Usage: CALL edit_category(1, 'Science Fiction')
+ * Notes:
+ *   - Validates that category exists before updating
+ *   - Returns full category record after update
+ *   - Throws error with custom message if category not found
+ */
+
+
+CREATE PROCEDURE edit_category(
+    IN p_category_id INT,
+    IN p_category_name VARCHAR(100)
+)
+BEGIN
+    -- Check if category exists
+    DECLARE category_exists INT;
+    SELECT COUNT(*) INTO category_exists 
+    FROM categories 
+    WHERE category_id = p_category_id;
+
+    IF category_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Category does not exist';
+    ELSE
+        -- Update category
+        UPDATE categories 
+        SET category_name = p_category_name
+        WHERE category_id = p_category_id;
+        
+        -- Return updated category
+        SELECT * FROM categories WHERE category_id = p_category_id;
+    END IF;
+END //
+
+-- ----------------------------------- DELETE CATEGORY
+/*
+ * Stored Procedure: delete_category
+ * Description: Deletes a category and removes all its associations in the book_category table
+ * Parameters:
+ *   - p_category_id: ID of the category to delete (INT)
+ * Returns: 
+ *   - Success message if category is deleted
+ *   - Error if category does not exist
+ * Example Usage: CALL delete_category(1)
+ * Notes:
+ *   - First removes all associations in book_category table
+ *   - Then deletes the category from categories table
+ *   - Validates that category exists before attempting deletion
+ *   - Uses transaction to ensure data integrity
+ */
+
+
+CREATE PROCEDURE delete_category(
+    IN p_category_id INT
+)
+BEGIN
+    -- Check if category exists
+    DECLARE category_exists INT;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'An error occurred while deleting the category';
+    END;
+    
+    SELECT COUNT(*) INTO category_exists 
+    FROM categories 
+    WHERE category_id = p_category_id;
+
+    IF category_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Category does not exist';
+    ELSE
+        -- Start transaction to ensure data integrity
+        START TRANSACTION;
+        
+        -- First, delete all associations in book_category table
+        DELETE FROM book_category 
+        WHERE category_id = p_category_id;
+        
+        -- Then delete the category
+        DELETE FROM categories 
+        WHERE category_id = p_category_id;
+        
+        COMMIT;
+        
+        SELECT CONCAT('Category ID ', p_category_id, ' has been successfully deleted') AS message;
+    END IF;
+END //
+
+
+-- ---------------------------------------------------------------------- AUTHORS
+
+/*
+ * Stored Procedure: add_author
+ * Description: Adds a single author to the authors table
+ * Parameters:
+ *   - p_first_name: Author's first name (VARCHAR(100))
+ *   - p_last_name: Author's last name (VARCHAR(100))
+ * Returns: 
+ *   - Newly created author_id and success message
+ * Example Usage: 
+ *   CALL add_author('George', 'Orwell')
+ * Notes:
+ *   - Does not check for duplicate authors
+ *   - Returns the ID of the newly created author
+ */
+
+-- Single Author Insertion Procedure
+CREATE PROCEDURE add_author(
+    IN p_first_name VARCHAR(100),
+    IN p_last_name VARCHAR(100)
+)
+BEGIN
+    INSERT INTO authors (first_name, last_name)
+    VALUES (p_first_name, p_last_name);
+    
+    -- Capture the inserted ID properly
+    SET @author_id = LAST_INSERT_ID();
+
+    -- Return a success message
+    SELECT @author_id AS author_id, 
+           CONCAT('Author ', p_first_name, ' ', p_last_name, ' added successfully') AS message;
+END //
+
+/*
+ * Stored Procedure: edit_author
+ * Description: Updates an existing author's information
+ * Parameters:
+ *   - p_author_id: ID of the author to update (INT)
+ *   - p_first_name: New first name (VARCHAR(100))
+ *   - p_last_name: New last name (VARCHAR(100))
+ * Returns: Success message
+ * Example Usage: CALL edit_author(1, 'George R.R.', 'Martin')
+ */
+
+CREATE PROCEDURE edit_author(
+    IN p_author_id INT,
+    IN p_first_name VARCHAR(100),
+    IN p_last_name VARCHAR(100)
+)
+BEGIN
+    DECLARE author_exists INT;
+    
+    -- Check if author exists
+    SELECT COUNT(*) INTO author_exists 
+    FROM authors 
+    WHERE author_id = p_author_id;
+    
+    IF author_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Author does not exist';
+    ELSE
+        UPDATE authors
+        SET first_name = p_first_name,
+            last_name = p_last_name
+        WHERE author_id = p_author_id;
+        
+        SELECT CONCAT('Author ID ', p_author_id, ' has been successfully updated') AS message;
+    END IF;
+END //
+
+/*
+ * Stored Procedure: delete_author
+ * Description: Deletes an author and removes all book associations
+ * Parameters:
+ *   - p_author_id: ID of the author to delete (INT)
+ * Returns: Success message
+ * Example Usage: CALL delete_author(1)
+ * Notes:
+ *   - First removes all associations in book_author table
+ *   - Then deletes the author from authors table
+ *   - Uses transaction to ensure data integrity
+ */
+
+CREATE PROCEDURE delete_author(
+    IN p_author_id INT
+)
+BEGIN
+    DECLARE author_exists INT;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'An error occurred while deleting the author';
+    END;
+    
+    -- Check if author exists
+    SELECT COUNT(*) INTO author_exists 
+    FROM authors 
+    WHERE author_id = p_author_id;
+
+    IF author_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Author does not exist';
+    ELSE
+        -- Start transaction
+        START TRANSACTION;
+        
+        -- First, delete all associations in book_author table
+        DELETE FROM book_authors
+        WHERE author_id = p_author_id;
+        
+        -- Then delete the author
+        DELETE FROM authors 
+        WHERE author_id = p_author_id;
+        
+        COMMIT;
+        
+        SELECT CONCAT('Author ID ', p_author_id, ' has been successfully deleted') AS message;
+    END IF;
+END //
+
 
 /*
  * Stored Procedure: add_authors
@@ -288,24 +557,45 @@ DELIMITER ;
  *   - Each object must have first_name and last_name properties
  *   - Does not check for duplicate authors
  */
-DELIMITER //
+
+
 CREATE PROCEDURE add_authors(
     IN author_list JSON
 )
 BEGIN
     DECLARE i INT DEFAULT 0;
-    DECLARE n INT DEFAULT JSON_LENGTH(author_list);
+    DECLARE n INT DEFAULT IFNULL(JSON_LENGTH(author_list), 0);
+    DECLARE v_first_name VARCHAR(100);
+    DECLARE v_last_name VARCHAR(100);
     
+    -- Validate JSON length to avoid infinite loops
+    IF n = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invalid or empty JSON input';
+    END IF;
+
     WHILE i < n DO
+        -- Extract author data safely
+        SET v_first_name = JSON_UNQUOTE(JSON_EXTRACT(author_list, CONCAT('$[', i, '].first_name')));
+        SET v_last_name = JSON_UNQUOTE(JSON_EXTRACT(author_list, CONCAT('$[', i, '].last_name')));
+
+        -- Ensure extracted values are not NULL or empty
+        IF v_first_name IS NULL OR v_first_name = '' OR v_last_name IS NULL OR v_last_name = '' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invalid JSON structure: Missing first_name or last_name';
+        END IF;
+
+        -- Insert author
         INSERT INTO authors (first_name, last_name)
-        VALUES (
-            JSON_UNQUOTE(JSON_EXTRACT(author_list, CONCAT('$[', i, '].first_name'))),
-            JSON_UNQUOTE(JSON_EXTRACT(author_list, CONCAT('$[', i, '].last_name')))
-        );
+        VALUES (v_first_name, v_last_name);
+        
         SET i = i + 1;
     END WHILE;
+    SET i = 0;
+    
+    SELECT CONCAT(n, ' authors added successfully') AS message;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- ADD BOOK
 
@@ -327,7 +617,7 @@ DELIMITER ;
  *   - All author_ids and category_ids must exist in their respective tables
  *   - Handles multiple authors and categories for a single book
  */
-DELIMITER //
+
 CREATE PROCEDURE add_book(
     IN p_title VARCHAR(255),
     IN p_publication_year INT,
@@ -360,7 +650,7 @@ BEGIN
         );
         SET i = i + 1;
     END WHILE;
-    
+    SET i = 0;
     -- Reset counter for categories
     SET i = 0;
     
@@ -373,16 +663,17 @@ BEGIN
         );
         SET i = i + 1;
     END WHILE;
-    
+    SET i = 0;
+
     COMMIT;
 END //
-DELIMITER ;
+
 
 
 -- ---------------------------------------------------------- LOGIN PROCEDURES
 
 -- Login procedure for members
-DELIMITER //
+
 CREATE PROCEDURE member_login(
     IN p_email VARCHAR(255),
     IN p_password VARCHAR(255)
@@ -401,10 +692,10 @@ BEGIN
     AND password = SHA2(p_password, 256);
     
 END //
-DELIMITER ;
+
 
 -- Login procedure for librarians 
-DELIMITER //
+
 CREATE PROCEDURE librarian_login(
     IN p_email VARCHAR(255),
     IN p_password VARCHAR(255)
@@ -423,12 +714,12 @@ BEGIN
     AND password = SHA2(p_password, 256);
     
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- VIEW PROFILE(MEMBER)
 
 -- View Profile procedure for members
-DELIMITER //
+
 CREATE PROCEDURE view_member_profile(
     IN p_member_id INT
 )
@@ -443,12 +734,12 @@ BEGIN
     FROM members
     WHERE member_id = p_member_id;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- VIEW PROFILE(LIB)
 
 -- View Profile procedure for librarians
-DELIMITER //
+
 CREATE PROCEDURE view_librarian_profile(
     IN p_librarian_id INT
 )
@@ -461,12 +752,12 @@ BEGIN
     FROM librarians
     WHERE librarian_id = p_librarian_id;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- EDIT PROFILE(MEMBER)
 
 -- Edit Profile procedure for members
-DELIMITER //
+
 CREATE PROCEDURE edit_member_profile(
     IN p_member_id INT,
     IN p_first_name VARCHAR(100),
@@ -487,12 +778,12 @@ BEGIN
     -- Return updated profile
     SELECT * FROM members WHERE member_id = p_member_id;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- EDIT PROFILE(LIB)
 
 -- Edit Profile procedure for librarians
-DELIMITER //
+
 CREATE PROCEDURE edit_librarian_profile(
     IN p_librarian_id INT,
     IN p_first_name VARCHAR(100),
@@ -508,12 +799,12 @@ BEGIN
     -- Return updated profile
     SELECT * FROM librarians WHERE librarian_id = p_librarian_id;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- CHANGE PASS(MEMBER)
 
 -- Change Password procedure for members
-DELIMITER //
+
 CREATE PROCEDURE change_member_password(
     IN p_member_id INT,
     IN p_old_password VARCHAR(256),
@@ -541,12 +832,12 @@ BEGIN
         SELECT 'Password updated successfully' as message;
     END IF;
 END //
-DELIMITER ;
+
 
 -- ------------------------------------------------------------------------- CHANGE PASS
 
 -- Change Password procedure for librarians
-DELIMITER //
+
 CREATE PROCEDURE change_librarian_password(
     IN p_librarian_id INT,
     IN p_old_password VARCHAR(256),
@@ -573,58 +864,3 @@ BEGIN
     END IF;
 END //
 DELIMITER ;
-
-
--- -------------------------------------------------------------------------------- PROCEDURES CALLS 
-
-
--- Test member login
-CALL member_login('john.doe@email.com', 'John00');
-
--- Test librarian login 
-CALL librarian_login('admin@library.com', 'admin123');
-
--- Test view member profile
-CALL view_member_profile(1);
-
--- Test view librarian profile
-CALL view_librarian_profile(1);
-
--- Test edit member profile
-CALL edit_member_profile(1, 'John', 'Smith', '+1987654321', '456 Oak Avenue');
-
--- Test change member password
-CALL change_member_password(1, 'John00', 'NewPass123');
-
--- Test change librarian password
-CALL change_librarian_password(1, 'admin123', 'NewAdminPass123');
-
--- OPERATIONS
--- INITIAL OPERATIONS NEEDED
-
--- Initial Librarian
-INSERT INTO librarians (first_name, last_name, email, password) VALUES
-('Admin', 'Librarian', 'admin@library.com', SHA2('admin123', 256));
-
--- Example usage:
-CALL signup_member('John', 'Doe', 'john.doe@email.com', 'John00', '+1234567890', '123 Main St');
-
-CALL add_categories('["Fiction", "Non-Fiction", "Science", "Technology", "Literature"]');
-
-CALL add_authors('[
-    {"first_name": "George", "last_name": "Orwell"},
-    {"first_name": "Jane", "last_name": "Austen"},
-    {"first_name": "Stephen", "last_name": "Hawking"},
-    {"first_name": "J.K.", "last_name": "Rowling"},
-    {"first_name": "Ernest", "last_name": "Hemingway"}
-]');
-
--- Add a book with multiple authors and categories
-CALL add_book(
-    '1984',
-    1949,
-    '978-0451524',
-    5,
-    '[1]',  -- Author IDs
-    '[1, 5]'  -- Category IDs: Fiction and Literature
-);
