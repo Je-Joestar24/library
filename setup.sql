@@ -597,7 +597,8 @@ BEGIN
 END //
 
 
--- ------------------------------------------------------------------------- ADD BOOK
+-- ------------------------------------------------------------------------- BOOK
+-- ------------------------------------- ADD BOOK
 
 /*
  * Stored Procedure: add_book
@@ -667,6 +668,84 @@ BEGIN
 
     COMMIT;
 END //
+
+/*
+ * Stored Procedure: edit_book
+ * Description: Updates an existing book and its associated authors and categories
+ * Parameters:
+ *   - p_book_id: ID of the book to edit (INT)
+ *   - p_title: Updated book title (VARCHAR(255))
+ *   - p_publication_year: Updated year of publication (INT)
+ *   - p_isbn: Updated ISBN (VARCHAR(13))
+ *   - p_copies_available: Updated number of copies (INT)
+ *   - author_ids: JSON array of new author IDs
+ *   - category_ids: JSON array of new category IDs
+ * Returns: None
+ * Example Usage:
+ *   CALL edit_book(1, '1984 (Revised)', 1949, '978-0451524', 10, '[1,2]', '[1,3]')
+ * Notes:
+ *   - Uses transaction to ensure data consistency
+ *   - Deletes existing author and category associations before adding new ones
+ *   - All author_ids and category_ids must exist in their respective tables
+ */
+
+CREATE PROCEDURE edit_book(
+    IN p_book_id INT,
+    IN p_title VARCHAR(255),
+    IN p_publication_year INT,
+    IN p_isbn VARCHAR(13),
+    IN p_copies_available INT,
+    IN author_ids JSON,
+    IN category_ids JSON
+)
+BEGIN
+    DECLARE i INT DEFAULT 0;
+    DECLARE n_authors INT DEFAULT JSON_LENGTH(author_ids);
+    DECLARE n_categories INT DEFAULT JSON_LENGTH(category_ids);
+    
+    -- Start transaction for atomicity
+    START TRANSACTION;
+    
+    -- Update book details
+    UPDATE books 
+    SET title = p_title,
+        publication_year = p_publication_year,
+        isbn = p_isbn,
+        copies_available = p_copies_available
+    WHERE book_id = p_book_id;
+    
+    -- Delete existing author associations
+    DELETE FROM book_authors 
+    WHERE book_id = p_book_id;
+    
+    -- Delete existing category associations
+    DELETE FROM book_category 
+    WHERE book_id = p_book_id;
+    
+    -- Add new authors
+    WHILE i < n_authors DO
+        INSERT INTO book_authors (book_id, author_id)
+        VALUES (
+            p_book_id,
+            JSON_EXTRACT(author_ids, CONCAT('$[', i, ']'))
+        );
+        SET i = i + 1;
+    END WHILE;
+    SET i = 0;
+    
+    -- Add new categories
+    WHILE i < n_categories DO
+        INSERT INTO book_category (book_id, category_id)
+        VALUES (
+            p_book_id,
+            JSON_EXTRACT(category_ids, CONCAT('$[', i, ']'))
+        );
+        SET i = i + 1;
+    END WHILE;
+
+    COMMIT;
+END //
+
 
 
 
