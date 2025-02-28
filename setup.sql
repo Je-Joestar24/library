@@ -746,8 +746,70 @@ BEGIN
     COMMIT;
 END //
 
+/*
+ * Stored Procedure: delete_book
+ * Description: Deletes a book and removes all its associations from related tables
+ * Parameters:
+ *   - p_book_id: ID of the book to delete (INT)
+ * Returns: 
+ *   - Success message if book is deleted
+ *   - Error if book does not exist or cannot be deleted
+ * Example Usage: CALL delete_book(1)
+ * Notes:
+ *   - Checks if book exists before deletion
+ *   - Removes associations from book_authors, book_category, borrowings, and book_cart
+ *   - Uses transaction to ensure data integrity
+ */
 
+CREATE PROCEDURE delete_book(
+    IN p_book_id INT
+)
+BEGIN
+    DECLARE book_exists INT;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'An error occurred while deleting the book';
+    END;
+    
+    -- Check if book exists
+    SELECT COUNT(*) INTO book_exists 
+    FROM books 
+    WHERE book_id = p_book_id;
 
+    IF book_exists = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Book does not exist';
+    ELSE
+        -- Start transaction to ensure data integrity
+        START TRANSACTION;
+        
+        -- Delete from book_cart
+        DELETE FROM book_cart 
+        WHERE book_id = p_book_id;
+        
+        -- Delete from borrowings
+        DELETE FROM borrowings 
+        WHERE book_id = p_book_id;
+        
+        -- Delete from book_category
+        DELETE FROM book_category 
+        WHERE book_id = p_book_id;
+        
+        -- Delete from book_authors
+        DELETE FROM book_authors 
+        WHERE book_id = p_book_id;
+        
+        -- Finally delete the book
+        DELETE FROM books 
+        WHERE book_id = p_book_id;
+        
+        COMMIT;
+        
+        SELECT CONCAT('Book ID ', p_book_id, ' has been successfully deleted') AS message;
+    END IF;
+END //
 
 -- ---------------------------------------------------------- LOGIN PROCEDURES
 
@@ -942,4 +1004,159 @@ BEGIN
         SELECT 'Password updated successfully' as message;
     END IF;
 END //
+
+/* DISPLAY OUTPUTS */
+
+
+-- ---------------------------------------------------- /* LIBRARIAN DISPLAY */
+
+-- Display Books Table
+CREATE PROCEDURE display_books(
+    IN p_search_title VARCHAR(255),
+    IN p_filter_available BOOLEAN,
+    IN p_sort_by_title BOOLEAN
+)
+BEGIN
+    SELECT 
+        b.book_id,
+        b.title,
+        b.created_at,
+        b.copies_available
+    FROM books b
+    WHERE 
+        (p_search_title IS NULL OR b.title LIKE CONCAT('%', p_search_title, '%'))
+        AND (p_filter_available IS NULL OR 
+            CASE 
+                WHEN p_filter_available = 1 THEN b.copies_available > 0
+                ELSE b.copies_available = 0
+            END)
+    ORDER BY
+        CASE WHEN p_sort_by_title = 1 THEN b.title END ASC,
+        CASE WHEN p_sort_by_title = 0 OR p_sort_by_title IS NULL THEN b.book_id END ASC;
+END //
+
+-- View Specific Book
+CREATE PROCEDURE view_book_details(
+    IN p_book_id INT
+)
+BEGIN
+    SELECT 
+        b.book_id,
+        b.title,
+        b.publication_year,
+        b.isbn,
+        b.copies_available,
+        GROUP_CONCAT(DISTINCT a.full_name) as authors,
+        GROUP_CONCAT(DISTINCT c.category_name) as categories
+    FROM books b
+    LEFT JOIN book_authors ba ON b.book_id = ba.book_id
+    LEFT JOIN authors a ON ba.author_id = a.author_id
+    LEFT JOIN book_category bc ON b.book_id = bc.book_id
+    LEFT JOIN categories c ON bc.category_id = c.category_id
+    WHERE b.book_id = p_book_id
+    GROUP BY b.book_id;
+END //
+
+-- Display Authors
+CREATE PROCEDURE display_authors(
+    IN p_search_name VARCHAR(255),
+    IN p_sort_by_name BOOLEAN
+)
+BEGIN
+    SELECT 
+        a.author_id,
+        a.full_name,
+        COUNT(DISTINCT ba.book_id) as number_of_books
+    FROM authors a
+    LEFT JOIN book_authors ba ON a.author_id = ba.author_id
+    WHERE 
+        p_search_name IS NULL OR 
+        a.full_name LIKE CONCAT('%', p_search_name, '%')
+    GROUP BY a.author_id
+    ORDER BY
+        CASE WHEN p_sort_by_name = 1 THEN a.full_name END ASC,
+        CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN a.author_id END ASC;
+END //
+
+-- Display Categories
+CREATE PROCEDURE display_categories(
+    IN p_search_name VARCHAR(100),
+    IN p_sort_by_name BOOLEAN
+)
+BEGIN
+    SELECT 
+        c.category_id,
+        c.category_name,
+        COUNT(DISTINCT bc.book_id) as number_of_books
+    FROM categories c
+    LEFT JOIN book_category bc ON c.category_id = bc.category_id
+    WHERE 
+        p_search_name IS NULL OR 
+        c.category_name LIKE CONCAT('%', p_search_name, '%')
+    GROUP BY c.category_id
+    ORDER BY
+        CASE WHEN p_sort_by_name = 1 THEN c.category_name END ASC,
+        CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN c.category_id END ASC;
+END //
+
+-- Display Users
+CREATE PROCEDURE display_users(
+    IN p_search_term VARCHAR(255),
+    IN p_sort_by_name BOOLEAN
+)
+BEGIN
+    SELECT 
+        first_name,
+        last_name,
+        email,
+        phone_number
+    FROM members
+    WHERE 
+        p_search_term IS NULL OR
+        first_name LIKE CONCAT('%', p_search_term, '%') OR
+        last_name LIKE CONCAT('%', p_search_term, '%') OR
+        email LIKE CONCAT('%', p_search_term, '%') OR
+        phone_number LIKE CONCAT('%', p_search_term, '%')
+    ORDER BY
+        CASE WHEN p_sort_by_name = 1 THEN full_name END ASC,
+        CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN member_id END ASC;
+END //
+
+-- Display Borrowed Books
+CREATE PROCEDURE display_borrowed_books(
+    IN p_search_term VARCHAR(255),
+    IN p_filter_status ENUM('borrowed', 'returned', 'overdue'),
+    IN p_sort_by_book_name BOOLEAN
+)
+BEGIN
+    SELECT 
+        br.borrowing_id,
+        b.title as book_name,
+        m.full_name as member_name,
+        m.email,
+        m.phone_number,
+        br.due_date,
+        CASE 
+            WHEN br.returned_at IS NOT NULL THEN 'Returned'
+            ELSE 'Not Returned'
+        END as return_status
+    FROM borrowings br
+    JOIN books b ON br.book_id = b.book_id
+    JOIN members m ON br.member_id = m.member_id
+    WHERE 
+        (p_search_term IS NULL OR
+        m.full_name LIKE CONCAT('%', p_search_term, '%') OR
+        m.email LIKE CONCAT('%', p_search_term, '%') OR
+        m.phone_number LIKE CONCAT('%', p_search_term, '%'))
+        AND (p_filter_status IS NULL OR br.status = p_filter_status)
+    ORDER BY
+        CASE WHEN p_sort_by_book_name = 1 THEN b.title END ASC,
+        CASE WHEN p_sort_by_book_name = 0 OR p_sort_by_book_name IS NULL THEN br.borrowing_id END ASC;
+END //
+
+
+
+/* MEMBER DISPLAY */
+
+
 DELIMITER ;

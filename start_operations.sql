@@ -74,7 +74,10 @@ CALL add_book(
     '[1]',  -- Author IDs
     '[1, 5]'  -- Category IDs: Fiction and Literature
 );
+CALL add_book('1981', 1949, '978-0451521', 5, '[2]', '[2, 5]');
 
 -- Edit a book
 CALL edit_book(1, '1984 (Revised)', 1949, '978-0451524', 10, '[1,2]', '[1,3]');
 
+-- Delete a book
+CALL delete_book(2);
