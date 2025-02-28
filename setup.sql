@@ -1009,8 +1009,30 @@ END //
 
 
 -- ---------------------------------------------------- /* LIBRARIAN DISPLAY */
+/*
+ * LIBRARIAN DISPLAY PROCEDURES
+ * ===========================
+ * 
+ * This section contains procedures that are ONLY accessible to librarians.
+ * These procedures provide administrative functionality for managing and viewing
+ * library data. Regular members do not have access to these procedures.
+ */
 
--- Display Books Table
+/*
+ * Display Books Table
+ * ------------------
+ * Allows librarians to view and filter the book inventory
+ *
+ * Parameters:
+ * - p_search_title: Optional search term to filter books by title
+ * - p_filter_available: When true, shows only books with copies available
+ *                      When false, shows only books with no copies
+ *                      When null, shows all books
+ * - p_sort_by_title: When true, sorts results alphabetically by title
+ *                    When false/null, sorts by book ID
+ *
+ * Returns: Book ID, title, creation date, and available copies
+ */
 CREATE PROCEDURE display_books(
     IN p_search_title VARCHAR(255),
     IN p_filter_available BOOLEAN,
@@ -1035,7 +1057,20 @@ BEGIN
         CASE WHEN p_sort_by_title = 0 OR p_sort_by_title IS NULL THEN b.book_id END ASC;
 END //
 
--- View Specific Book
+/*
+ * View Specific Book Details
+ * -------------------------
+ * Retrieves detailed information about a specific book including authors and categories
+ *
+ * Parameters:
+ * - p_book_id: The ID of the book to view
+ *
+ * Returns: Complete book details including:
+ * - Book ID, title, publication year, ISBN
+ * - Number of available copies
+ * - Comma-separated list of authors
+ * - Comma-separated list of categories
+ */
 CREATE PROCEDURE view_book_details(
     IN p_book_id INT
 )
@@ -1057,7 +1092,18 @@ BEGIN
     GROUP BY b.book_id;
 END //
 
--- Display Authors
+/*
+ * Display Authors
+ * --------------
+ * Lists all authors with their book counts and optional filtering/sorting
+ *
+ * Parameters:
+ * - p_search_name: Optional search term to filter authors by name
+ * - p_sort_by_name: When true, sorts results alphabetically by author name
+ *                   When false/null, sorts by author ID
+ *
+ * Returns: Author ID, full name, and total number of books by author
+ */
 CREATE PROCEDURE display_authors(
     IN p_search_name VARCHAR(255),
     IN p_sort_by_name BOOLEAN
@@ -1078,7 +1124,18 @@ BEGIN
         CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN a.author_id END ASC;
 END //
 
--- Display Categories
+/*
+ * Display Categories
+ * ----------------
+ * Lists all book categories with their book counts and optional filtering/sorting
+ *
+ * Parameters:
+ * - p_search_name: Optional search term to filter categories by name
+ * - p_sort_by_name: When true, sorts results alphabetically by category name
+ *                   When false/null, sorts by category ID
+ *
+ * Returns: Category ID, name, and total number of books in category
+ */
 CREATE PROCEDURE display_categories(
     IN p_search_name VARCHAR(100),
     IN p_sort_by_name BOOLEAN
@@ -1099,7 +1156,18 @@ BEGIN
         CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN c.category_id END ASC;
 END //
 
--- Display Users
+/*
+ * Display Users
+ * ------------
+ * Lists library members with optional search and sorting capabilities
+ *
+ * Parameters:
+ * - p_search_term: Optional search term to filter users by name, email, or phone
+ * - p_sort_by_name: When true, sorts results alphabetically by member name
+ *                   When false/null, sorts by member ID
+ *
+ * Returns: Member's first name, last name, email, and phone number
+ */
 CREATE PROCEDURE display_users(
     IN p_search_term VARCHAR(255),
     IN p_sort_by_name BOOLEAN
@@ -1122,7 +1190,22 @@ BEGIN
         CASE WHEN p_sort_by_name = 0 OR p_sort_by_name IS NULL THEN member_id END ASC;
 END //
 
--- Display Borrowed Books
+/*
+ * Display Borrowed Books
+ * --------------------
+ * Shows all book borrowings with detailed member information and status
+ *
+ * Parameters:
+ * - p_search_term: Optional search term to filter by member name, email, or phone
+ * - p_filter_status: Optional filter for borrowing status (borrowed/returned/overdue)
+ * - p_sort_by_book_name: When true, sorts results alphabetically by book title
+ *                        When false/null, sorts by borrowing ID
+ *
+ * Returns: Borrowing details including:
+ * - Borrowing ID, book title
+ * - Member's full name, email, phone
+ * - Due date and return status
+ */
 CREATE PROCEDURE display_borrowed_books(
     IN p_search_term VARCHAR(255),
     IN p_filter_status ENUM('borrowed', 'returned', 'overdue'),
@@ -1153,8 +1236,6 @@ BEGIN
         CASE WHEN p_sort_by_book_name = 1 THEN b.title END ASC,
         CASE WHEN p_sort_by_book_name = 0 OR p_sort_by_book_name IS NULL THEN br.borrowing_id END ASC;
 END //
-
-
 
 /* MEMBER DISPLAY */
 
