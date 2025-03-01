@@ -1499,7 +1499,7 @@ BEGIN
         GROUP_CONCAT(DISTINCT a.full_name) as authors,
         GROUP_CONCAT(DISTINCT c.category_name) as categories,
         b.copies_available,
-        COUNT(DISTINCT orrowing_id) as times_borrowed
+        COUNT(DISTINCT borrowing_id) as times_borrowed
     FROM books b
     LEFT JOIN book_authors ba ON b.book_id = ba.book_id
     LEFT JOIN authors a ON ba.author_id = a.author_id
