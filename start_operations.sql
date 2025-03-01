@@ -124,4 +124,33 @@ CALL display_borrowed_books(NULL, NULL, TRUE); -- Show all borrowings sorted by 
 CALL display_borrowed_books('Smith', 'borrowed', TRUE); -- Search by name, show borrowed, sort by book
 
 
--- -------LIBRARIAN DISPLAY CALLS
+-- -------MEMBER PROCEURE CALLS
+
+-- add_to_cart examples
+CALL add_to_cart(1, 1); -- Add book ID 5 to member ID 1's cart
+
+-- remove_from_cart examples 
+CALL remove_from_cart(1, 1); -- Remove book ID 5 from member ID 1's cart
+
+-- borrow_book examples
+CALL borrow_book(1, 1); -- Member ID 1 borrows book ID 20
+
+-- return_book examples
+CALL return_book(1); -- Return borrowing ID 1
+
+-- popular_available_books examples
+CALL popular_available_books(); -- Get top 5 most borrowed available books
+
+-- book_cards examples
+CALL book_cards('Harry Potter', NULL, TRUE); -- Search by title, no category filter, sort by title
+CALL book_cards(NULL, 1, FALSE); -- No title search, filter by category ID 1, sort by ID
+CALL book_cards('Lord', 2, TRUE); -- Search title containing 'Lord', filter by category ID 2, sort by title
+
+-- book_view examples
+CALL book_view(1); -- View details for book ID 1
+
+-- member_borrowed_books examples
+CALL member_borrowed_books(1); -- List books borrowed by member ID 1
+
+-- member_cart examples
+CALL member_cart(1); -- List books in member ID 1's cart

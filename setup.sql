@@ -812,9 +812,27 @@ BEGIN
 END //
 
 -- ---------------------------------------------------------- LOGIN PROCEDURES
+/*
+ * AUTHENTICATION AND PROFILE MANAGEMENT PROCEDURES
+ * =============================================
+ * 
+ * This section contains procedures for user authentication and profile management
+ * for both members and librarians. These procedures handle login, profile viewing,
+ * profile editing, and password changes.
+ */
 
--- Login procedure for members
-
+/*
+ * Stored Procedure: member_login
+ * Description: Authenticates a library member using email and password
+ * Parameters:
+ *   - p_email: Member's registered email address (VARCHAR(255))
+ *   - p_password: Member's password, will be hashed with SHA2 (VARCHAR(255))
+ * Returns: Member details (ID, name, email) if credentials match
+ * Example Usage: CALL member_login('john@email.com', 'password123')
+ * Notes:
+ *   - Password is hashed using SHA2 with 256-bit output
+ *   - Returns empty result if credentials don't match
+ */
 CREATE PROCEDURE member_login(
     IN p_email VARCHAR(255),
     IN p_password VARCHAR(255)
@@ -834,9 +852,18 @@ BEGIN
     
 END //
 
-
--- Login procedure for librarians 
-
+/*
+ * Stored Procedure: librarian_login
+ * Description: Authenticates a library staff member using email and password
+ * Parameters:
+ *   - p_email: Librarian's registered email address (VARCHAR(255))
+ *   - p_password: Librarian's password, will be hashed with SHA2 (VARCHAR(255))
+ * Returns: Librarian details (ID, name, email) if credentials match
+ * Example Usage: CALL librarian_login('staff@library.com', 'staffpass')
+ * Notes:
+ *   - Password is hashed using SHA2 with 256-bit output
+ *   - Returns empty result if credentials don't match
+ */
 CREATE PROCEDURE librarian_login(
     IN p_email VARCHAR(255),
     IN p_password VARCHAR(255)
@@ -856,11 +883,17 @@ BEGIN
     
 END //
 
-
--- ------------------------------------------------------------------------- VIEW PROFILE(MEMBER)
-
--- View Profile procedure for members
-
+/*
+ * Stored Procedure: view_member_profile
+ * Description: Retrieves profile information for a specific member
+ * Parameters:
+ *   - p_member_id: ID of the member to view (INT)
+ * Returns: Member's full profile including contact details
+ * Example Usage: CALL view_member_profile(1)
+ * Notes:
+ *   - Returns all non-sensitive member information
+ *   - Password is excluded from results
+ */
 CREATE PROCEDURE view_member_profile(
     IN p_member_id INT
 )
@@ -876,11 +909,17 @@ BEGIN
     WHERE member_id = p_member_id;
 END //
 
-
--- ------------------------------------------------------------------------- VIEW PROFILE(LIB)
-
--- View Profile procedure for librarians
-
+/*
+ * Stored Procedure: view_librarian_profile
+ * Description: Retrieves profile information for a specific librarian
+ * Parameters:
+ *   - p_librarian_id: ID of the librarian to view (INT)
+ * Returns: Librarian's basic profile information
+ * Example Usage: CALL view_librarian_profile(1)
+ * Notes:
+ *   - Returns only basic librarian information
+ *   - Password is excluded from results
+ */
 CREATE PROCEDURE view_librarian_profile(
     IN p_librarian_id INT
 )
@@ -894,11 +933,21 @@ BEGIN
     WHERE librarian_id = p_librarian_id;
 END //
 
-
--- ------------------------------------------------------------------------- EDIT PROFILE(MEMBER)
-
--- Edit Profile procedure for members
-
+/*
+ * Stored Procedure: edit_member_profile
+ * Description: Updates profile information for a specific member
+ * Parameters:
+ *   - p_member_id: ID of the member to update (INT)
+ *   - p_first_name: New first name (VARCHAR(100))
+ *   - p_last_name: New last name (VARCHAR(100))
+ *   - p_phone_number: New phone number (VARCHAR(20))
+ *   - p_address: New address (TEXT)
+ * Returns: Updated member profile
+ * Example Usage: CALL edit_member_profile(1, 'John', 'Smith', '+1234567890', '123 Main St')
+ * Notes:
+ *   - Uses COALESCE to only update provided fields
+ *   - Automatically updates timestamp
+ */
 CREATE PROCEDURE edit_member_profile(
     IN p_member_id INT,
     IN p_first_name VARCHAR(100),
@@ -920,11 +969,19 @@ BEGIN
     SELECT * FROM members WHERE member_id = p_member_id;
 END //
 
-
--- ------------------------------------------------------------------------- EDIT PROFILE(LIB)
-
--- Edit Profile procedure for librarians
-
+/*
+ * Stored Procedure: edit_librarian_profile
+ * Description: Updates profile information for a specific librarian
+ * Parameters:
+ *   - p_librarian_id: ID of the librarian to update (INT)
+ *   - p_first_name: New first name (VARCHAR(100))
+ *   - p_last_name: New last name (VARCHAR(100))
+ * Returns: Updated librarian profile
+ * Example Usage: CALL edit_librarian_profile(1, 'Jane', 'Doe')
+ * Notes:
+ *   - Uses COALESCE to only update provided fields
+ *   - Limited to name changes only for security
+ */
 CREATE PROCEDURE edit_librarian_profile(
     IN p_librarian_id INT,
     IN p_first_name VARCHAR(100),
@@ -941,11 +998,20 @@ BEGIN
     SELECT * FROM librarians WHERE librarian_id = p_librarian_id;
 END //
 
-
--- ------------------------------------------------------------------------- CHANGE PASS(MEMBER)
-
--- Change Password procedure for members
-
+/*
+ * Stored Procedure: change_member_password
+ * Description: Updates password for a specific member after verification
+ * Parameters:
+ *   - p_member_id: ID of the member (INT)
+ *   - p_old_password: Current password for verification (VARCHAR(256))
+ *   - p_new_password: New password to set (VARCHAR(256))
+ * Returns: Success/failure message
+ * Example Usage: CALL change_member_password(1, 'oldpass123', 'newpass123')
+ * Notes:
+ *   - Verifies old password before allowing change
+ *   - Passwords are hashed using SHA2
+ *   - Updates timestamp on successful change
+ */
 CREATE PROCEDURE change_member_password(
     IN p_member_id INT,
     IN p_old_password VARCHAR(256),
@@ -974,11 +1040,19 @@ BEGIN
     END IF;
 END //
 
-
--- ------------------------------------------------------------------------- CHANGE PASS
-
--- Change Password procedure for librarians
-
+/*
+ * Stored Procedure: change_librarian_password
+ * Description: Updates password for a specific librarian after verification
+ * Parameters:
+ *   - p_librarian_id: ID of the librarian (INT)
+ *   - p_old_password: Current password for verification (VARCHAR(256))
+ *   - p_new_password: New password to set (VARCHAR(256))
+ * Returns: Success/failure message
+ * Example Usage: CALL change_librarian_password(1, 'oldpass123', 'newpass123')
+ * Notes:
+ *   - Verifies old password before allowing change
+ *   - Passwords are hashed using SHA2
+ */
 CREATE PROCEDURE change_librarian_password(
     IN p_librarian_id INT,
     IN p_old_password VARCHAR(256),
@@ -1004,6 +1078,8 @@ BEGIN
         SELECT 'Password updated successfully' as message;
     END IF;
 END //
+
+
 
 /* DISPLAY OUTPUTS */
 
@@ -1224,8 +1300,8 @@ BEGIN
             ELSE 'Not Returned'
         END as return_status
     FROM borrowings br
-    JOIN books b ON br.book_id = b.book_id
-    JOIN members m ON br.member_id = m.member_id
+    INNER JOIN books b ON br.book_id = b.book_id
+    INNER JOIN members m ON br.member_id = m.member_id
     WHERE 
         (p_search_term IS NULL OR
         m.full_name LIKE CONCAT('%', p_search_term, '%') OR
@@ -1237,7 +1313,243 @@ BEGIN
         CASE WHEN p_sort_by_book_name = 0 OR p_sort_by_book_name IS NULL THEN br.borrowing_id END ASC;
 END //
 
-/* MEMBER DISPLAY */
+/* MEMBER PROCEDURES */
 
+/*
+ * Stored Procedure: add_to_cart
+ * Description: Adds a book to a member's cart for later borrowing
+ * Parameters:
+ *   - p_member_id: ID of the member adding to cart (INT)
+ *   - p_book_id: ID of the book to add (INT)
+ * Returns: None
+ * Example Usage: CALL add_to_cart(1, 5)
+ * Notes:
+ *   - Creates a new cart entry linking the member and book
+ *   - Does not check book availability
+ */
+CREATE PROCEDURE add_to_cart(
+    IN p_member_id INT,
+    IN p_book_id INT
+)
+BEGIN
+    INSERT INTO book_cart (member_id, book_id)
+    VALUES (p_member_id, p_book_id);
+END //
+
+/*
+ * Stored Procedure: remove_from_cart
+ * Description: Removes a book from a member's cart
+ * Parameters:
+ *   - p_member_id: ID of the member removing from cart (INT)
+ *   - p_book_id: ID of the book to remove (INT)
+ * Returns: None
+ * Example Usage: CALL remove_from_cart(1, 5)
+ * Notes:
+ *   - Deletes the cart entry for the specified member and book
+ *   - No error if entry doesn't exist
+ */
+CREATE PROCEDURE remove_from_cart(
+    IN p_member_id INT,
+    IN p_book_id INT
+)
+BEGIN
+    DELETE FROM book_cart 
+    WHERE member_id = p_member_id AND book_id = p_book_id;
+END //
+
+/*
+ * Stored Procedure: borrow_book
+ * Description: Records a book borrowing and updates inventory
+ * Parameters:
+ *   - p_member_id: ID of the borrowing member (INT)
+ *   - p_book_id: ID of the book being borrowed (INT)
+ * Returns: None
+ * Example Usage: CALL borrow_book(1, 5)
+ * Notes:
+ *   - Creates borrowing record with 14 day due date
+ *   - Decrements available copies count
+ *   - Does not validate copy availability
+ */
+CREATE PROCEDURE borrow_book(
+    IN p_member_id INT,
+    IN p_book_id INT
+)
+BEGIN
+    INSERT INTO borrowings (member_id, book_id, due_date)
+    VALUES (p_member_id, p_book_id, DATE_ADD(CURRENT_DATE, INTERVAL 14 DAY));
+    
+    UPDATE books 
+    SET copies_available = copies_available - 1
+    WHERE book_id = p_book_id;
+END //
+
+/*
+ * Stored Procedure: return_book
+ * Description: Processes a book return and updates inventory
+ * Parameters:
+ *   - p_borrowing_id: ID of the borrowing record (INT)
+ * Returns: None
+ * Example Usage: CALL return_book(1)
+ * Notes:
+ *   - Updates borrowing status to 'returned'
+ *   - Records return timestamp
+ *   - Increments available copies count
+ */
+CREATE PROCEDURE return_book(
+    IN p_borrowing_id INT
+)
+BEGIN
+    DECLARE v_book_id INT;
+    
+    SELECT book_id INTO v_book_id
+    FROM borrowings
+    WHERE borrowing_id = p_borrowing_id;
+    
+    UPDATE borrowings 
+    SET returned_at = CURRENT_TIMESTAMP,
+        status = 'returned'
+    WHERE borrowing_id = p_borrowing_id;
+    
+    UPDATE books
+    SET copies_available = copies_available + 1
+    WHERE book_id = v_book_id;
+END //
+
+/*
+ * Stored Procedure: popular_available_books
+ * Description: Lists the most frequently borrowed books that are currently available
+ * Parameters: None
+ * Returns: Book titles and their borrow counts
+ * Example Usage: CALL popular_available_books()
+ * Notes:
+ *   - Only includes books with at least one borrow
+ *   - Limited to top 5 most borrowed
+ *   - Only shows currently available books
+ */
+CREATE PROCEDURE popular_available_books()
+BEGIN
+    SELECT 
+        b.title,
+        COUNT(br.borrowing_id) as borrow_count
+    FROM books b
+    LEFT JOIN borrowings br ON b.book_id = br.book_id
+    WHERE b.copies_available > 0
+    GROUP BY b.book_id, b.title
+    HAVING COUNT(br.borrowing_id) > 0
+    ORDER BY borrow_count DESC
+    LIMIT 5;
+END //
+
+/*
+ * Stored Procedure: book_cards
+ * Description: Generates book listings with filtering and sorting options
+ * Parameters:
+ *   - p_search_title: Search term for book title (VARCHAR(255))
+ *   - p_category_id: Filter by category ID (INT)
+ *   - p_sort_by_title: Sort alphabetically by title when true (BOOLEAN)
+ * Returns: Book details including title, authors, categories and availability
+ * Example Usage: CALL book_cards('Harry', 1, true)
+ * Notes:
+ *   - Only shows available books
+ *   - Authors and categories are concatenated lists
+ *   - Supports partial title matching
+ */
+CREATE PROCEDURE book_cards(
+    IN p_search_title VARCHAR(255),
+    IN p_category_id INT,
+    IN p_sort_by_title BOOLEAN
+)
+BEGIN
+    SELECT 
+        b.title,
+        GROUP_CONCAT(DISTINCT a.full_name) as authors,
+        GROUP_CONCAT(DISTINCT c.category_name) as categories,
+        b.copies_available
+    FROM books b
+    LEFT JOIN book_authors ba ON b.book_id = ba.book_id
+    LEFT JOIN authors a ON ba.author_id = a.author_id
+    LEFT JOIN book_category bc ON b.book_id = bc.book_id
+    LEFT JOIN categories c ON bc.category_id = c.category_id
+    WHERE b.copies_available > 0
+    AND (p_search_title IS NULL OR b.title LIKE CONCAT('%', p_search_title, '%'))
+    AND (p_category_id IS NULL OR c.category_id = p_category_id)
+    GROUP BY b.book_id
+    ORDER BY 
+        CASE WHEN p_sort_by_title = 1 THEN b.title END ASC,
+        CASE WHEN p_sort_by_title = 0 OR p_sort_by_title IS NULL THEN b.book_id END ASC;
+END //
+
+/*
+ * Stored Procedure: book_view
+ * Description: Retrieves detailed information for a specific book
+ * Parameters:
+ *   - p_book_id: ID of the book to view (INT)
+ * Returns: Book details including title, authors, categories, availability and borrow history
+ * Example Usage: CALL book_view(1)
+ * Notes:
+ *   - Authors and categories are concatenated lists
+ *   - Includes total times borrowed count
+ */
+CREATE PROCEDURE book_view(
+    IN p_book_id INT
+)
+BEGIN
+    SELECT 
+        b.title,
+        GROUP_CONCAT(DISTINCT a.full_name) as authors,
+        GROUP_CONCAT(DISTINCT c.category_name) as categories,
+        b.copies_available,
+        COUNT(DISTINCT orrowing_id) as times_borrowed
+    FROM books b
+    LEFT JOIN book_authors ba ON b.book_id = ba.book_id
+    LEFT JOIN authors a ON ba.author_id = a.author_id
+    LEFT JOIN book_category bc ON b.book_id = bc.book_id
+    LEFT JOIN categories c ON bc.category_id = c.category_id
+    LEFT JOIN borrowings br ON b.book_id = br.book_id
+    WHERE b.book_id = p_book_id
+    GROUP BY b.book_id;
+END //
+
+/*
+ * Stored Procedure: member_borrowed_books
+ * Description: Lists all books currently borrowed by a member
+ * Parameters:
+ *   - p_member_id: ID of the member (INT)
+ * Returns: Titles of books currently borrowed
+ * Example Usage: CALL member_borrowed_books(1)
+ * Notes:
+ *   - Only shows unreturned books
+ *   - Uses RIGHT JOIN to ensure all borrowed books are included
+ */
+CREATE PROCEDURE member_borrowed_books(
+    IN p_member_id INT
+)
+BEGIN
+    SELECT b.title
+    FROM borrowings br
+    RIGHT JOIN books b ON br.book_id = b.book_id
+    WHERE br.member_id = p_member_id
+    AND br.returned_at IS NULL;
+END //
+
+/*
+ * Stored Procedure: member_cart
+ * Description: Lists all books in a member's cart
+ * Parameters:
+ *   - p_member_id: ID of the member (INT)
+ * Returns: Titles of books in cart
+ * Example Usage: CALL member_cart(1)
+ * Notes:
+ *   - Uses RIGHT JOIN to ensure all cart items are included
+ */
+CREATE PROCEDURE member_cart(
+    IN p_member_id INT
+)
+BEGIN
+    SELECT b.title
+    FROM book_cart bc
+    RIGHT JOIN books b ON bc.book_id = b.book_id
+    WHERE bc.member_id = p_member_id;
+END //
 
 DELIMITER ;
